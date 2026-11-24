@@ -5,11 +5,18 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CraneDesignRequest;
 use App\Http\Resources\CraneDesignResource;
 use App\Models\CraneDesign;
+use App\Services\CraneGeometryService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 
 class CraneDesignController extends Controller
 {
+    public function generate(CraneDesignRequest $request, CraneGeometryService $geometry): JsonResponse
+    {
+        return response()->json(['data' => $geometry->generate($request->validated())]);
+    }
+
     public function index(): AnonymousResourceCollection
     {
         return CraneDesignResource::collection(

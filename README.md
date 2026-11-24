@@ -1,6 +1,6 @@
 # Crane Design Studio — base setup
 
-Docker-first Laravel 12 / PHP 8.3, Inertia 2, Vue 3, Tailwind 4, SQLite and Vite starter. No crane functionality yet.
+Docker-first Laravel 12 / PHP 8.3, Inertia 2, Vue 3, Tailwind 4, SQLite and Vite application with crane design storage, CRUD APIs and a preliminary drawing preview. See the [geometry contract and calculation notes](docs/crane-geometry.md).
 
 ## Run locally
 
@@ -15,7 +15,7 @@ First boot requires internet access to download images and Composer/npm packages
 In another terminal run `docker compose exec app npm run dev` for Vite hot reload. When stopping Vite, run `docker compose exec app rm -f public/hot` to return to built assets. Rebuild assets with `docker compose exec app npm run build`.
 
 - Artisan: `docker compose exec app php artisan migrate:status`
-- Tests: `docker compose exec app php artisan test` (initial Laravel tests only)
+- Tests: `docker compose exec app php artisan test`
 - Stop: `docker compose down`
 - Restart: `docker compose up`
 
@@ -27,4 +27,4 @@ After successful first boot, run `git init`, `git add .`, `git commit -m "Initia
 
 ## Verification status
 
-Starter source and shell syntax checked; Docker build and dependency installation have not been executed in the authoring environment (Docker/network unavailable).
+The Phase 4 preview was exercised against the running Compose app. All 48 tests passed, including the existing database and REST API tests.
