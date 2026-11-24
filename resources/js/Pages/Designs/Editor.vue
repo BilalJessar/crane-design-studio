@@ -1,5 +1,6 @@
 <script setup>
 import axios from 'axios';
+import { validPreview } from '../../previewGeometry';
 import { Head } from '@inertiajs/vue3';
 import { onBeforeUnmount, reactive, ref } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
@@ -60,9 +61,7 @@ async function generate() {
         });
         if (request !== activeRequest) return;
         const data = response.data?.data;
-        if (!data?.parameters || !data.units || ![data.views?.front, data.views?.top].every(
-            view => Array.isArray(view?.components) && Array.isArray(view?.dimensions)
-        )) {
+        if (!validPreview(data)) {
             error.value = 'The server returned incomplete preview data. Please generate again.';
             return;
         }

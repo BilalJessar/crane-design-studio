@@ -12,6 +12,7 @@ class CraneGeometryServiceTest extends TestCase
     {
         return [
             'sample' => [15000, 500, 300, 2500, 6000, 5],
+            'design B' => [20000, 750, 400, 3500, 8000, 10],
             'minimum' => [3000, 100, 100, 500, 1000, 0.5],
             'maximum' => [30000, 2000, 1500, 6000, 20000, 20],
             'girder wider than carriage' => [3001, 1999, 1499, 501, 1001, 1.25],
@@ -40,6 +41,7 @@ class CraneGeometryServiceTest extends TestCase
             $this->assertEquals($height, $shapes['girder']['height']);
             $this->assertSame('xMidYMid meet', $view['preserveAspectRatio']);
             if ($name === 'top') {
+                $this->assertArrayHasKey('trolley', $shapes);
                 foreach (['left' => 0, 'right' => $span] as $side => $railX) {
                     $carriage = $shapes[$side.'_carriage'];
                     $this->assertEquals($railX, $carriage['x'] + $carriage['width'] / 2);
@@ -47,6 +49,9 @@ class CraneGeometryServiceTest extends TestCase
                 }
             } else {
                 $this->assertSame("Required lifting height: $lift mm", $shapes['lifting_height']['text']);
+                $this->assertSame("Required capacity: $capacity metric tonnes", $shapes['capacity']['text']);
+                $this->assertArrayHasKey('left_carriage', $shapes);
+                $this->assertArrayHasKey('right_carriage', $shapes);
                 $this->assertArrayHasKey('hoist', $shapes);
                 $this->assertArrayHasKey('hook_tip', $shapes);
             }
@@ -60,7 +65,13 @@ class CraneGeometryServiceTest extends TestCase
                 $this->assertSame("$value mm", $dimension['label']['geometry']['text']);
                 $line = $dimension['line']['geometry'];
                 $this->assertEquals($value, hypot($line['x2'] - $line['x1'], $line['y2'] - $line['y1']));
-                array_push($items, $dimension['line'], $dimension['label']);
+                $this->assertCount(2, $dimension['extensions']);
+                foreach ($dimension['extensions'] as $index => $extension) {
+                    $end = $index + 1;
+                    $this->assertEquals($line["x$end"], $extension['geometry']['x2']);
+                    $this->assertEquals($line["y$end"], $extension['geometry']['y2']);
+                }
+                array_push($items, $dimension['line'], $dimension['label'], ...$dimension['extensions']);
             }
 
             $box = $view['viewBox'];

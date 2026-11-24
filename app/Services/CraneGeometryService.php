@@ -19,7 +19,7 @@ class CraneGeometryService
             'views' => ['front' => $this->front($parameters), 'top' => $this->top($parameters)],
             'presentation_assumptions' => [
                 'Model coordinates increase rightward and downward. Use uniform scaling in each view.',
-                'Rail line extents, carriage thickness, centered hoist and hook symbols, text sizes and annotation offsets are presentation only.',
+                'Rail line extents, front carriage symbols, plan carriage thickness, centered trolley, hoist and hook symbols, text sizes and annotation offsets are presentation only.',
                 'The girder is drawn between rail centers. Overhangs and connection details are unspecified.',
             ],
             'engineering_limitations' => [
@@ -35,20 +35,23 @@ class CraneGeometryService
         $depth = $p['girder_depth'];
         $u = $span / 80;
         $mid = $span / 2;
-        $bottom = $depth + 5 * $u;
+        $bottom = $depth + 9 * $u;
         $components = [
             ...$this->rails($span, -$u, $depth + $u),
             $this->rectangle('girder', 0, 0, $span, $depth),
+            $this->rectangle('left_carriage', -$u / 2, -$u, $u, $u),
+            $this->rectangle('right_carriage', $span - $u / 2, -$u, $u, $u),
             $this->rectangle('hoist', $mid - $u, $depth, 2 * $u, $u),
             $this->line('hook_stem', $mid, $depth + $u, $mid, $depth + 3 * $u),
             $this->line('hook_tip', $mid, $depth + 3 * $u, $mid + $u, $depth + 2 * $u),
-            $this->label('lifting_height', $mid, $bottom,
-                "Required lifting height: {$p['lifting_height']} mm", $u, 'middle'),
+            $this->label('lifting_height', $mid, $bottom - 2.5 * $u,
+                "Required lifting height: {$p['lifting_height']} mm", 1.6 * $u, 'middle'),
+            $this->label('capacity', $mid, $bottom, "Required capacity: {$p['capacity']} metric tonnes", 1.6 * $u, 'middle'),
         ];
 
         return $this->view($span, -2 * $u, $bottom, $u, $components, [
-            $this->dimension('span', $span, 0, -2 * $u, $span, -2 * $u, $u),
-            $this->dimension('girder_depth', $depth, $span + 2 * $u, 0, $span + 2 * $u, $depth, $u),
+            $this->dimension('span', $span, 0, -2 * $u, $span, -2 * $u, $u, -$u),
+            $this->dimension('girder_depth', $depth, $span + 2 * $u, 0, $span + 2 * $u, $depth, $u, $span),
         ]);
     }
 
@@ -65,12 +68,13 @@ class CraneGeometryService
             $this->rectangle('girder', 0, -$width / 2, $span, $width),
             $this->rectangle('left_carriage', -$u / 2, -$length / 2, $u, $length),
             $this->rectangle('right_carriage', $span - $u / 2, -$length / 2, $u, $length),
+            $this->rectangle('trolley', $span / 2 - $u, -$u, 2 * $u, 2 * $u),
         ];
 
         return $this->view($span, $spanY, $edge + $u, $u, $components, [
-            $this->dimension('span', $span, 0, $spanY, $span, $spanY, $u),
-            $this->dimension('end_carriage_length', $length, -2 * $u, -$length / 2, -2 * $u, $length / 2, $u),
-            $this->dimension('girder_width', $width, $span + 2 * $u, -$width / 2, $span + 2 * $u, $width / 2, $u),
+            $this->dimension('span', $span, 0, $spanY, $span, $spanY, $u, -$edge - $u),
+            $this->dimension('end_carriage_length', $length, -2 * $u, -$length / 2, -2 * $u, $length / 2, $u, -$u / 2),
+            $this->dimension('girder_width', $width, $span + 2 * $u, -$width / 2, $span + 2 * $u, $width / 2, $u, $span),
         ]);
     }
 
@@ -93,22 +97,31 @@ class CraneGeometryService
         ];
     }
 
-    private function dimension(string $id, int $value, $x1, $y1, $x2, $y2, $u): array
+    private function dimension(string $id, int $value, $x1, $y1, $x2, $y2, $u, $reference): array
     {
         $x = ($x1 + $x2) / 2;
         $y = ($y1 + $y2) / 2;
         $anchor = 'middle';
         if ($x1 == $x2) {
+            $extensions = [
+                $this->line($id.'_start', $reference, $y1, $x1, $y1),
+                $this->line($id.'_end', $reference, $y2, $x2, $y2),
+            ];
             $anchor = $x1 < 0 ? 'end' : 'start';
             $x += $x1 < 0 ? -$u : $u;
         } else {
+            $extensions = [
+                $this->line($id.'_start', $x1, $reference, $x1, $y1),
+                $this->line($id.'_end', $x2, $reference, $x2, $y2),
+            ];
             $y -= $u;
         }
 
         return [
             'id' => $id, 'value' => $value,
+            'extensions' => $extensions,
             'line' => $this->line($id.'_line', $x1, $y1, $x2, $y2),
-            'label' => $this->label($id.'_label', $x, $y, "$value mm", $u, $anchor),
+            'label' => $this->label($id.'_label', $x, $y, "$value mm", 1.6 * $u, $anchor),
         ];
     }
 

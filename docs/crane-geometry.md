@@ -14,7 +14,7 @@
 
 Every component is an object with a stable `id` within the view, a `type` and a `geometry` object. Rectangles carry `x,y,width,height`. Lines carry `x1,y1,x2,y2`. Text carries `x,y,text,fontSize,anchor`, where y is the baseline and anchor is the SVG text-anchor value. Geometry is numeric except for text content and anchor. A renderer can dispatch by type and use the component ID for styling, for example to dash the rail centerlines.
 
-Every dimension contains `id` (the input field), `value` (millimeters), and two complete shape objects named `line` and `label`. Draw these after the components. The front dimensions are span and girder depth. The top dimensions are span, carriage length and girder width. Required lifting height is a standalone front text component.
+Every dimension contains `id` (the input field), `value` (millimeters), a pair of extension lines in `extensions`, and complete `line` and `label` shapes. Draw these after the components. The front dimensions are span and girder depth. The top dimensions are span, carriage length and girder width. Required lifting height and required capacity are standalone front text components.
 
 Success returns HTTP 200. Invalid input returns 422 with Laravel's `message` and field-keyed `errors`. Unexpected exceptions use the existing JSON error handler, with HTTP 500 and `{"message":"Server Error"}` when debug is disabled.
 
@@ -32,11 +32,13 @@ One coordinate unit represents one millimeter on both axes. Positive x goes righ
 | Top envelope and rails | E = max(W,L)/2. Each rail runs from −E−u to E+u | Half-extent of the larger centered rectangle, plus a visible centerline extension |
 | Front rails | y from −u to D+u | Extend center marks beyond girder faces |
 | Hoist and hook | Hoist (M−u,D,2u,u). Stem (M,D+u) to (M,D+3u). Tip continues to (M+u,D+2u) | Centered presentation symbols. Their geometry conveys neither hook travel nor clearance |
-| Lifting requirement | Centered text baseline at (M,D+5u) | Leave space below hook for the user-supplied lifting height |
+| Front carriage symbols | Centered on each rail, width and height u, immediately above the girder | Symbolic envelope only |
+| Top trolley | Centered at (M,0), width and height 2u | Presentation symbol |
+| Requirements | Centered baselines at (M,D+6.5u) for lift and (M,D+9u) for capacity | Text records the requirements below the hook |
 | Span line | x from 0 to S. Front y = −2u. Top y = −E−2u | Endpoints align with rail centers. Offset places the annotation above components |
 | Vertical dimension lines | Front depth at x = S+2u, y from 0 to D. Top width at x = S+2u, y from −W/2 to W/2. Top length at x = −2u, y from −L/2 to L/2 | Endpoints match the measured faces. Exterior lanes separate labels even when W = L |
-| Labels | Start at endpoint midpoint ((x1+x2)/2,(y1+y2)/2). Horizontal label moves up u and centers. Vertical label moves outward u, anchored end on the left and start on the right. Font size = u | Arithmetic midpoint and presentation spacing. Label text uses the original integer followed by mm |
-| Vertical bounds | Front T = −2u, B = D+5u. Top T = −E−2u, B = E+u | T is the span line. B is the lowest text baseline or rail endpoint respectively |
+| Labels | Start at endpoint midpoint ((x1+x2)/2,(y1+y2)/2). Horizontal label moves up u and centers. Vertical label moves outward u, anchored end on the left and start on the right. Font size = 1.6u | Arithmetic midpoint and presentation spacing. Label text uses the original integer followed by mm |
+| Vertical bounds | Front T = −2u, B = D+9u. Top T = −E−2u, B = E+u | T is the span line. B is the lowest text baseline or rail endpoint respectively |
 | ViewBox | (−12u, T−3u, S+24u, B−T+6u) | Add side gutters for values and top/bottom gutters for labels and strokes. Gutters are layout choices |
 | Aspect ratio | `xMidYMid meet` corresponds to uniform scale min(viewport width / box width, viewport height / box height) | Fit and center the entire drawing. Positive validated lengths give u > 0 and positive box dimensions |
 
@@ -59,7 +61,7 @@ $response.StatusCode
 $before -ceq (Invoke-WebRequest -UseBasicParsing $url).Content
 ```
 
-Expect 200 and a final comparison of True. For this request u = 187.5 in both views and E = 1250 in plan. The front box is (−2250, −937.5, 19500, 2937.5). The top box is (−2250, −2187.5, 19500, 4187.5). The top girder starts at y = −150 and the carriages start at y = −1250. The following complete dimension object appears in `data.views.front.dimensions`:
+Expect 200 and a final comparison of True. For this request u = 187.5 in both views and E = 1250 in plan. The front box is (−2250, −937.5, 19500, 3687.5). The top box is (−2250, −2187.5, 19500, 4187.5). The top girder starts at y = −150 and the carriages start at y = −1250. The following complete dimension object appears in `data.views.front.dimensions`:
 
 ```json
 {
@@ -70,10 +72,14 @@ Expect 200 and a final comparison of True. For this request u = 187.5 in both vi
     "type": "line",
     "geometry": {"x1": 15375, "y1": 0, "x2": 15375, "y2": 500}
   },
+  "extensions": [
+    {"id": "girder_depth_start", "type": "line", "geometry": {"x1": 15000, "y1": 0, "x2": 15375, "y2": 0}},
+    {"id": "girder_depth_end", "type": "line", "geometry": {"x1": 15000, "y1": 500, "x2": 15375, "y2": 500}}
+  ],
   "label": {
     "id": "girder_depth_label",
     "type": "text",
-    "geometry": {"x": 15562.5, "y": 250, "text": "500 mm", "fontSize": 187.5, "anchor": "start"}
+    "geometry": {"x": 15562.5, "y": 250, "text": "500 mm", "fontSize": 300, "anchor": "start"}
   }
 }
 ```
