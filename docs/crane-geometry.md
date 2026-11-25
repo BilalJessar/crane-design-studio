@@ -44,6 +44,22 @@ One coordinate unit represents one millimeter on both axes. Positive x goes righ
 
 The application assumes a schematic single girder between rail centers. Overhangs, connection details, hoist location, symbol sizes, offsets, rail extents, typography and margins have no manufacturing significance. Capacity is a user-entered rating and lifting height is a requirement. Neither determines sizing, overall height or hook clearance. The generator performs no checks of strength, deflection, wheel loads, motor power, safe working load or manufacturing tolerances. The response identifies the drawing as preliminary and unapproved for manufacturing or structural safety assessment. The formulas above derive from the supplied dimensions, elementary coordinate geometry and explicit layout choices.
 
+## Dimension extensions and SVG rendering
+
+For a horizontal span line, each extension keeps its endpoint's x and joins the reference y to the dimension y. The front reference is −u and the top reference is −E−u, the upper rail endpoints. For a vertical dimension, each extension keeps its endpoint's y and joins the reference x to the dimension x. The depth and width references are x = S at the girder end. The carriage-length reference is x = −u/2 at the outside of the left carriage symbol. These are drafting choices in `CraneGeometryService::dimension`. They leave the reported physical lengths intact.
+
+The following rules come from `CraneDrawing.vue`, `DrawingShape.vue` and `downloadDrawing.js`. They control presentation. Coordinates and font sizes inside the viewBox use drawing units. Percentages, rem and exported pixel dimensions describe the display surface.
+
+| Rule | Relationship and rationale |
+| --- | --- |
+| Shape order and style | Paint the two rail centerlines first, then the service's components in order. Draw each dimension's two extensions, arrowed line and label above them. Rectangles, lines and text use their supplied coordinates directly. Gray identifies the girder, amber the mechanical symbols and teal the dimensions. Non-scaling strokes keep outlines legible during zoom. Rail strokes use width 1 and dash pattern 4 on, 2 off. Hook lines use 1.5, extensions 0.8 and dimension lines 1. |
+| Arrowheads | Let F = 1.6u, the first dimension label's font size. Each marker viewport is 0.65F wide and 0.5F high in drawing units. An 8 × 6 marker box contains the triangle (0,0), (8,3), (0,6). The tip (8,3) sits on the endpoint. Automatic orientation reverses the start arrow. |
+| Zoom and clipping | Zoom z starts at 1, changes by 0.25 and ranges from 0.5 to 3. Display width is 100z percent of the container and maximum height is 21z rem. The scroll area has a 24 rem maximum height. Reset or a changed drawing restores z = 1 and the scroll origin. |
+| Export footer | For source box (x,y,w,h), set font f = w/78. Starting at y+h, advance 1.6f per baseline and place each line at x+f. Lines contain the view and units, legend sentences, capacity/lift caveat and disclaimer. With n lines, the new height is H = h + 1.6fn + f. The extra f leaves a bottom margin. |
+| Export viewport | Keep (x,y,w) and substitute H for h. Remove screen zoom styling, copy computed shape styles, set width to 1200 px and height to 1200H/w px. This preserves the expanded box's aspect ratio. Export has no calibrated print scale. |
+
+The assignment reference drawing is illustrative. Its appearance supplies no certified dimensions or design criteria. The validation ranges in the README govern acceptable application inputs. They supply no engineering relationship between span, lift, capacity and girder size.
+
 ## Reproduce the example
 
 From the project root with the Compose service running, use PowerShell:

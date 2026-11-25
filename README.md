@@ -1,36 +1,106 @@
-# Crane Design Studio — base setup
+# Crane Design Studio
 
-Docker-first Laravel 12 / PHP 8.3, Inertia 2, Vue 3, Tailwind 4, SQLite and Vite application with crane design storage, CRUD APIs and a preliminary drawing preview. See the [geometry contract and calculation notes](docs/crane-geometry.md).
+A parametric overhead crane drawing generator for the Modern Crane Co. assignment. An engineer can enter a single-girder EOT crane’s dimensions, compare labelled front and top views, and reopen a saved design when a dimension changes. This reduces the need to redraw a preliminary layout for each revision.
 
-## Run locally
+## Install and run with Docker
 
-1. Install and start Docker Desktop (Linux: Docker Engine + Compose plugin).
-2. Open a terminal in this folder and run `docker compose up --build`.
-3. Open http://localhost:8000. API smoke check: http://localhost:8000/api/health .
+Install Docker Desktop with Linux containers on Windows or macOS, or Docker Engine and the Compose v2 plugin on Linux. Start Docker and confirm that `docker compose version` succeeds. Allow internet access for the first build and dependency downloads, write access to the checkout, and free local ports 8000 and 5173. Docker supplies PHP, Composer, Node and npm.
 
-First boot requires internet access to download images and Composer/npm packages. It installs dependencies from the committed lockfiles, creates the local environment and SQLite database, runs pending migrations and builds frontend assets. Subsequent starts preserve source files and the database.
+```sh
+git clone https://github.com/BilalJessar/crane-design-studio.git
+cd crane-design-studio
+docker compose up --build
+```
 
-## Development
+Wait for Artisan to report that the server is running. Open the [design editor](http://localhost:8000) or the [JSON health check](http://localhost:8000/api/health). Run the remaining commands in a second terminal in the project directory. Stop with `docker compose down` and restart with `docker compose up`.
 
-In another terminal run `docker compose exec app npm run dev` for Vite hot reload. When stopping Vite, run `docker compose exec app rm -f public/hot` to return to built assets. Rebuild assets with `docker compose exec app npm run build`.
+### Environment, database and sample data
 
-- Artisan: `docker compose exec app php artisan migrate:status`
-- Tests: `docker compose exec app php artisan test`
-- Stop: `docker compose down`
-- Restart: `docker compose up`
+On startup, `docker/start.sh` runs Composer install and npm ci against the committed lockfiles. It copies `.env.example` to `.env` if missing, generates a Laravel application key when needed, creates `database/database.sqlite` if absent, runs pending migrations, clears the Vite hot-file marker, builds assets and starts the server. The supplied environment uses SQLite, database-backed sessions and cache, and disabled debug output. No external service credentials are required.
 
-SQLite data lives in `database/database.sqlite` on the host. Vendor and node_modules use Docker volumes. The app is local-only and not production hardened.
+The SQLite file and environment live in the host checkout. Composer and npm dependencies live in named Docker volumes. A fresh database starts with an empty design list. To add the three illustrative designs, run the following command. The seeder preserves existing entries with the same sample names and also creates the default test user if missing.
 
-## Saved designs
+```sh
+docker compose exec app php artisan db:seed
+docker compose exec app php artisan migrate:status
+```
 
-Open `/` to start a design or `/designs` to open a saved one. Save Design persists the validated inputs and opens the design's permanent edit URL. Save Changes updates that record. Generate Preview calculates a drawing independently of saving.
+## Use the editor
 
-Opening `/designs/{id}/edit` restores the input parameters and regenerates both views and the technical summary. Future changes to the geometry service or SVG renderer may change how a previously saved design appears. Required capacity is supplied by the user and remains unverified.
+1. Open **New Design**, name the design and enter the required capacity and dimensions.
+2. Select **Generate Preview**. **Front View** shows span and depth with the capacity and lifting-height requirements. **Top View** shows span, girder width and carriage length. Zoom, reset the zoom or download the current view as an SVG with its legend and disclaimer.
+3. Select **Save Design**. The permanent edit URL identifies the saved record. **Saved Designs** lists records by most recent update. Select **Edit** to restore the inputs and regenerate the drawing.
+4. Change a dimension and generate again to inspect the revised drawing and summary. **Save Changes** updates the record. Refresh the edit page to reload its saved values. On the list, **Delete** opens a confirmation with options to cancel or remove that design.
 
-## Git
+## Stack and architecture
 
-After successful first boot, run `git init`, `git add .`, `git commit -m "Init Laravel Inertia+Vue project with Docker containerization"`. Commit generated composer.lock and package-lock.json. Keep subsequent commits separate. Record actual AI prompts and any verified mistakes as you work; DECISIONS.md must be written independently by the candidate.
+| Layer | Implementation and purpose |
+| --- | --- |
+| HTTP and validation | PHP 8.3 and Laravel 12 handle routing, shared request validation, JSON responses and migrations. Web routes supply Inertia page props. API routes call `CraneDesignController`. |
+| Storage | Eloquent persists the eight input fields in SQLite, which keeps local setup to one service. The resource returns those fields, the ID and the update timestamp. |
+| Geometry | `CraneGeometryService` takes validated parameters and returns deterministic primitives, dimension labels and view bounds for both views. Preview generation performs no design write. |
+| Editor | Inertia.js 2 and Vue 3 provide the editor and list in one Laravel project. Vue renders the SVG, tracks unsaved edits and requests previews and CRUD operations using Axios. SweetAlert2 handles confirmations and notifications. |
+| Assets and runtime | Tailwind CSS 4 styles the interface. Vite bundles JS and CSS. Docker Compose runs the application and its dependency tools with a consistent PHP and Node environment. |
 
-## Verification status
+## JSON API
 
-The Phase 4 preview was exercised against the running Compose app. All 48 tests passed, including the existing database and REST API tests.
+| Method and path | Success response |
+| --- | --- |
+| GET /api/health | 200 with `{"status":"ok"}` |
+| POST /api/designs/generate | 200 with drawing parameters, units, both views and limitations under `data` |
+| GET /api/designs | 200 with an array under `data`, newest update first, then highest ID |
+| POST /api/designs | 201 with the created design under `data` |
+| GET /api/designs/{id} | 200 with one design under `data` |
+| PUT /api/designs/{id} | 200 with the updated design under `data`. Supply all eight fields. |
+| DELETE /api/designs/{id} | 204 with an empty body |
+
+Example preview request in a POSIX shell (including Git Bash on Windows):
+
+```sh
+curl -X POST http://localhost:8000/api/designs/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Workshop A","crane_type":"single_girder","capacity":3.25,"span":12000,"lifting_height":5000,"girder_depth":450,"girder_width":250,"end_carriage_length":2200}'
+```
+
+The same JSON body works for creation and update. Invalid input returns 422 with a message and field-keyed `errors`. A missing record returns 404.
+
+### Server-side validation
+
+All fields are required on preview, creation and update. Numeric bounds are inclusive. These are provisional application limits from `config/crane_design.php`.
+
+| Field | Accepted value |
+| --- | --- |
+| name | Nonblank string, up to 150 characters |
+| crane_type | `single_girder` |
+| capacity | 0.5–20 metric tonnes, up to two decimal places |
+| span | 3,000–30,000 whole mm |
+| lifting_height | 1,000–20,000 whole mm |
+| girder_depth | 100–2,000 whole mm |
+| girder_width | 100–1,500 whole mm |
+| end_carriage_length | 500–6,000 whole mm |
+
+## Geometry and engineering limitations
+
+The service places rail centers at zero and the supplied span, then projects the entered girder and carriage dimensions onto two uniformly scaled views. The hook, trolley, annotation offsets and other symbolic sizes follow presentation rules. The calculation reference covers inputs, units, formulas, assumptions and SVG export. [Geometry and rendering reference](docs/crane-geometry.md)
+
+**Preliminary drawing only.** The assignment illustration provides visual context. The application does not verify structural strength, safe working loads, deflection, clearance or manufacturing suitability. Capacity and lifting height are user requirements. The design supports one crane type, integer millimeter dimensions and local use without authentication. Saved designs store parameters, so later changes to the renderer can affect their appearance.
+
+## Automated checks
+
+With Compose running, execute:
+
+```sh
+docker compose ps
+docker compose exec app php artisan route:list
+docker compose exec app php artisan migrate:status
+docker compose exec app php artisan test
+docker compose exec app vendor/bin/pint --test
+docker compose exec app npm run build
+git diff --check
+```
+
+PHPUnit uses in-memory SQLite. The suite covers validation boundaries, CRUD, sample data, deterministic geometry, preview responses and editor routes. The production build writes the Vite manifest and assets under `public/build`.
+
+## Actual development hours
+
+**Candidate to complete before submission — ____ hours.**
