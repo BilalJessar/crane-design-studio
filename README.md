@@ -103,4 +103,6 @@ PHPUnit uses in-memory SQLite. The suite covers validation boundaries, CRUD, sam
 
 ## Actual development hours
 
-**Candidate to complete before submission — ____ hours.**
+The assignment was completed over approximately one day, with around 15 hours of active work, including requirement analysis, development, testing, debugging and documentation.
+
+I took additional time beyond the recommended four hours to review the implementation, verify the application behavior and resolve issues identified during testing.
