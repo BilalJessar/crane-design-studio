@@ -10,5 +10,6 @@
 /storage/*.key
 /.crane-initialized
 /.phpunit.cache
+/.phpunit.result.cache
 /.idea/
 /.vscode/
