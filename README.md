@@ -8,7 +8,7 @@ Docker-first Laravel 12 / PHP 8.3, Inertia 2, Vue 3, Tailwind 4, SQLite and Vite
 2. Open a terminal in this folder and run `docker compose up --build`.
 3. Open http://localhost:8000. API smoke check: http://localhost:8000/api/health .
 
-First boot requires internet access to download images and Composer/npm packages. It generates the Laravel skeleton in this folder, installs dependencies, copies starter files, creates the local environment and SQLite database, runs migrations and builds frontend assets. Subsequent starts preserve source files and database. Do not remove `.crane-initialized` unless you intend to reapply starter files.
+First boot requires internet access to download images and Composer/npm packages. It installs dependencies from the committed lockfiles, creates the local environment and SQLite database, runs pending migrations and builds frontend assets. Subsequent starts preserve source files and the database.
 
 ## Development
 
@@ -29,7 +29,7 @@ Opening `/designs/{id}/edit` restores the input parameters and regenerates both 
 
 ## Git
 
-After successful first boot, run `git init`, `git add .`, `git commit -m "Initialize Dockerized Laravel Inertia Vue project"`. Commit generated composer.lock and package-lock.json. Keep subsequent commits separate. Record actual AI prompts and any verified mistakes as you work; DECISIONS.md must be written independently by the candidate.
+After successful first boot, run `git init`, `git add .`, `git commit -m "Init Laravel Inertia+Vue project with Docker containerization"`. Commit generated composer.lock and package-lock.json. Keep subsequent commits separate. Record actual AI prompts and any verified mistakes as you work; DECISIONS.md must be written independently by the candidate.
 
 ## Verification status
 

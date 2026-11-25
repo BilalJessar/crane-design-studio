@@ -41,9 +41,9 @@ class CraneGeometryPreviewTest extends TestCase
         $this->assertDatabaseCount('crane_designs', 0);
     }
 
-    public function test_preview_uses_standard_json_server_error(): void
+    public function test_preview_hides_server_diagnostics_even_in_debug_mode(): void
     {
-        config(['app.debug' => false]);
+        config(['app.debug' => true]);
         $this->mock(CraneGeometryService::class)->shouldReceive('generate')->once()
             ->andThrow(new RuntimeException('Internal diagnostic'));
         $this->post('/api/designs/generate', CraneDesign::factory()->raw())

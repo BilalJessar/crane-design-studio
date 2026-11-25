@@ -51,8 +51,11 @@ class CraneDesignApiTest extends TestCase
         $this->putJson($url, $updated)->assertOk()->assertExactJson(['data' => $metadata + $updated]);
         $this->assertDatabaseCount('crane_designs', 1);
         $this->assertDatabaseHas('crane_designs', ['id' => $id] + $updated);
+        $other = CraneDesign::factory()->create();
         $this->delete($url)->assertNoContent();
-        $this->assertDatabaseCount('crane_designs', 0);
+        $this->assertDatabaseMissing('crane_designs', ['id' => $id]);
+        $this->assertModelExists($other);
+        $this->assertDatabaseCount('crane_designs', 1);
     }
 
     public function test_reopened_parameters_regenerate_both_views(): void

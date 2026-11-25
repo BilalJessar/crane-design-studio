@@ -58,12 +58,12 @@ function message(key) {
         </div>
         <p class="text-sm text-slate-600">Default values are illustrative design inputs.</p>
         <div class="flex flex-wrap items-center gap-4 border-t border-slate-200 pt-5">
-            <button type="submit" :disabled="pending" class="rounded-md bg-teal-800 px-4 py-2 font-semibold text-white disabled:opacity-60">
+            <button type="submit" :disabled="pending" class="rounded-md bg-teal-800 hover:bg-teal-900 px-4 py-2 font-semibold text-white disabled:opacity-60">
                 {{ pending ? 'Generating…' : 'Generate Preview' }}
             </button>
-            <button type="button" class="rounded-md border border-teal-800 px-4 py-2 font-semibold text-teal-900 disabled:opacity-60"
+            <button type="button" class="rounded-md border border-teal-800 hover:bg-teal-50 hover:text-teal-950 px-4 py-2 font-semibold text-teal-900 disabled:opacity-60"
                 :disabled="saving" @click="emit('save')">{{ saving ? 'Saving…' : editing ? 'Save Changes' : 'Save Design' }}</button>
-            <button type="button" class="rounded px-2 py-2 text-sm font-semibold" @click="emit('reset')">Reset Form</button>
+            <button type="button" class="rounded hover:bg-slate-100 hover:text-slate-950 px-2 py-2 text-sm font-semibold" @click="emit('reset')">Reset Form</button>
         </div>
         </fieldset>
     </form>

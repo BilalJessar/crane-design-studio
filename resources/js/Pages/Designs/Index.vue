@@ -1,23 +1,26 @@
 <script setup>
 import axios from 'axios';
 import { Head, Link } from '@inertiajs/vue3';
-import { onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
+import { confirmAction, notify } from '../../notifications';
 import { craneTypeLabel } from '../../craneFields';
 
 const designs = ref([]);
 const loading = ref(true);
 const loadError = ref('');
 const deleting = ref(null);
-const deleteError = ref('');
-const notice = ref('');
+const lifetime = new AbortController();
+const busy = ref(false);
+const heading = ref();
+onBeforeUnmount(() => lifetime.abort());
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 async function load() {
     loading.value = true;
     loadError.value = '';
     try {
-        const { data } = await axios.get('/api/designs');
+        const { data } = await axios.get('/api/designs', { signal: lifetime.signal });
         if (!Array.isArray(data?.data)) throw new Error();
         designs.value = data.data;
     } catch {
@@ -28,23 +31,29 @@ async function load() {
 }
 onMounted(load);
 
-async function remove(design) {
-    if (deleting.value || !window.confirm('Delete “' + design.name + '”? This cannot be undone.')) return;
-    deleting.value = design.id;
-    notice.value = deleteError.value = '';
+async function remove(design, trigger) {
+    if (busy.value) return;
+    busy.value = true;
     try {
-        await axios.delete('/api/designs/' + design.id);
+        const { isConfirmed } = await confirmAction('Delete this design?',
+            'Delete "' + design.name + '"? This cannot be undone.', 'Yes, delete it!');
+        if (!isConfirmed || lifetime.signal.aborted) return;
+        deleting.value = design.id;
+        await axios.delete('/api/designs/' + design.id, { signal: lifetime.signal });
         designs.value = designs.value.filter(item => item.id !== design.id);
-        notice.value = 'Deleted “' + design.name + '”.';
+        await nextTick();
+        heading.value?.focus();
+        notify('success', 'Design deleted successfully.');
     } catch (failure) {
-        if (failure.response?.status === 404) {
-            notice.value = '“' + design.name + '” no longer exists. Refreshing the list.';
-            await load();
-        } else {
-            deleteError.value = 'Could not confirm deletion of “' + design.name + '”. Please try again.';
-        }
+        if (lifetime.signal.aborted) return;
+        notify('error', failure.response?.status === 404
+            ? 'Design no longer exists. Reload Saved Designs to refresh the list.'
+            : 'Deletion could not be confirmed. Check your connection and refresh before retrying.');
     } finally {
+        busy.value = false;
         deleting.value = null;
+        await nextTick();
+        if (trigger.isConnected) trigger.focus();
     }
 }
 </script>
@@ -53,11 +62,9 @@ async function remove(design) {
     <Head title="Saved Designs · Crane Design Studio" />
     <AppLayout>
         <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h1 class="text-3xl font-semibold tracking-tight">Saved Designs</h1>
-            <Link href="/" class="rounded-md bg-teal-800 px-4 py-2 font-semibold text-white">New Design</Link>
+            <h1 ref="heading" tabindex="-1" class="text-3xl font-semibold tracking-tight">Saved Designs</h1>
+            <Link href="/" class="rounded-md bg-teal-800 hover:bg-teal-900 px-4 py-2 font-semibold text-white">New Design</Link>
         </div>
-        <p v-if="notice" role="status" class="mb-4 text-teal-800">{{ notice }}</p>
-        <p v-if="deleteError" role="alert" class="mb-4 text-red-800">{{ deleteError }}</p>
         <p v-if="loading" role="status">Loading saved designs…</p>
         <div v-else-if="loadError" role="alert">{{ loadError }} <button class="underline" @click="load">Retry</button></div>
         <p v-else-if="!designs.length" role="status">No saved designs yet.</p>
@@ -72,9 +79,9 @@ async function remove(design) {
                     <dt>Last updated</dt><dd><time :datetime="design.updated_at">{{ dateFormat.format(new Date(design.updated_at)) }}</time></dd>
                 </dl>
                 <div class="mt-4 flex gap-4 border-t border-slate-200 pt-3 font-semibold">
-                    <Link :href="'/designs/' + design.id + '/edit'" :aria-label="'Edit ' + design.name" class="text-teal-800">Edit</Link>
-                    <button :aria-label="'Delete ' + design.name" :disabled="!!deleting" class="text-red-800 disabled:opacity-50"
-                        @click="remove(design)">{{ deleting === design.id ? 'Deleting…' : 'Delete' }}</button>
+                    <Link :href="'/designs/' + design.id + '/edit'" :aria-label="'Edit ' + design.name" class="rounded-md px-3 py-1.5 text-teal-800 hover:bg-teal-50 hover:text-teal-950">Edit</Link>
+                    <button :aria-label="'Delete ' + design.name" :disabled="!!deleting" class="rounded-md px-3 py-1.5 text-red-700 hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
+                        @click="remove(design, $event.currentTarget)">{{ deleting === design.id ? 'Deleting…' : 'Delete' }}</button>
                 </div>
             </li>
         </ul>

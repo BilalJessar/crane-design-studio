@@ -42,7 +42,7 @@ function navigate(event) {
             <div role="tablist" aria-label="Drawing view" class="flex gap-1 rounded-md bg-slate-100 p-1">
                 <button v-for="(label, key) in views" :id="'tab-' + key" :key="key" role="tab"
                     :aria-selected="view === key" aria-controls="drawing-panel" :tabindex="view === key ? 0 : -1"
-                    class="rounded px-3 py-1.5 text-sm font-medium" :class="{ 'bg-slate-800 text-white': view === key }"
+                    class="rounded px-3 py-1.5 text-sm font-medium" :class="view === key ? 'bg-slate-800 text-white hover:bg-slate-700' : 'hover:bg-slate-200 hover:text-slate-950'"
                     @click="emit('update:view', key)" @keydown="navigate">{{ label }}</button>
             </div>
         </div>
@@ -67,10 +67,10 @@ function navigate(event) {
                         role="img" :aria-label="geometry.parameters.name + ' - ' + views[view]">
                         <title>{{ views[view] }} - {{ geometry.parameters.name }}</title>
                         <defs>
-                            <marker :id="marker" viewBox="0 0 8 6" refX="0" refY="3" orient="auto-start-reverse"
+                            <marker :id="marker" viewBox="0 0 8 6" refX="8" refY="3" orient="auto-start-reverse"
                                 markerUnits="userSpaceOnUse" :markerWidth="drawing.dimensions[0].label.geometry.fontSize * 0.65"
                                 :markerHeight="drawing.dimensions[0].label.geometry.fontSize * 0.5">
-                                <path d="M8 0 L0 3 L8 6 Z" fill="#0f766e" />
+                                <path d="M0 0 L8 3 L0 6 Z" fill="#0f766e" />
                             </marker>
                         </defs>
                         <DrawingShape v-for="shape in drawing.components" :key="shape.id" :shape="shape"
@@ -101,7 +101,7 @@ function navigate(event) {
 
 <style scoped>
 @reference "../../css/app.css";
-.zoom { @apply rounded border border-slate-300 px-2 py-1 font-medium disabled:opacity-40; }
+.zoom { @apply rounded border border-slate-300 px-2 py-1 font-medium enabled:hover:bg-teal-50 enabled:hover:text-teal-900 disabled:opacity-40; }
 .part, .extension, .dimension { vector-effect: non-scaling-stroke; }
 rect.part { fill: #fef3c7; stroke: #92400e; }
 rect[data-part="girder"] { fill: #cbd5e1; stroke: #334155; }

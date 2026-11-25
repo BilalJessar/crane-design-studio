@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { Head, router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { notify, confirmAction } from '../../notifications';
 import { validPreview } from '../../previewGeometry';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import CraneForm from '../../Components/CraneForm.vue';
@@ -24,14 +25,14 @@ const pending = ref(false);
 const saving = ref(false);
 const loading = ref(!!designId.value);
 const loadError = ref('');
-const saveError = ref('');
-const notice = ref('');
 const errors = ref({});
 const error = ref('');
 const resetVersion = ref(0);
 const lifetime = new AbortController();
 let activeRequest;
 let removeGuard;
+let confirmingLeave = false;
+let allowLeave = false;
 
 function matches(inputs) {
     return keys.every(key => String(form[key]) === String(inputs[key]));
@@ -71,8 +72,21 @@ function beforeUnload(event) {
 }
 onMounted(() => {
     window.addEventListener('beforeunload', beforeUnload);
-    removeGuard = router.on('before', () => {
-        if (dirty.value && !window.confirm('Leave this design and discard your unsaved changes?')) return false;
+    removeGuard = router.on('before', event => {
+        if (saving.value) return false;
+        if (!dirty.value || allowLeave) return;
+        if (!confirmingLeave) {
+            confirmingLeave = true;
+            const visit = event.detail.visit;
+            confirmAction('Discard unsaved changes?', 'Your edits will be lost if you leave this design.', 'Discard changes')
+                .then(({ isConfirmed }) => {
+                    if (isConfirmed && !lifetime.signal.aborted) {
+                        allowLeave = true;
+                        try { router.visit(visit.url, visit); } finally { allowLeave = false; }
+                    }
+                }).finally(() => { confirmingLeave = false; });
+        }
+        return false;
     });
     if (designId.value) reopen();
 });
@@ -88,14 +102,12 @@ function edit(key, value) {
     form[key] = value;
     delete errors.value[key];
     error.value = '';
-    notice.value = '';
-    saveError.value = '';
 }
 function reset() {
     cancelPreview();
     Object.assign(form, saved.value);
     errors.value = {};
-    error.value = saveError.value = notice.value = '';
+    error.value = '';
     geometry.value = previewInputs.value = null;
     view.value = 'front';
     resetVersion.value++;
@@ -105,7 +117,7 @@ async function save() {
     if (saving.value) return;
     cancelPreview();
     saving.value = true;
-    notice.value = saveError.value = error.value = '';
+    error.value = '';
     errors.value = {};
     try {
         const creating = !designId.value;
@@ -123,16 +135,17 @@ async function save() {
                 preserveState: true,
             });
         }
-        notice.value = creating ? 'Design saved.' : 'Changes saved.';
+        notify('success', creating ? 'Design saved successfully.' : 'Design updated successfully.');
         if (!geometry.value || outdated.value) generate();
     } catch (failure) {
+        if (lifetime.signal.aborted) return;
         if (failure.response?.status === 422) {
             errors.value = failure.response.data.errors;
-            saveError.value = 'Review the highlighted inputs and save again.';
+            notify('error', 'Review the highlighted inputs and save again.');
         } else if (failure.response?.status === 404) {
-            saveError.value = 'This design no longer exists. Your inputs are still shown below.';
+            notify('error', 'Update failed. This design no longer exists.');
         } else {
-            saveError.value = 'Save could not be confirmed. Check Saved Designs before retrying.';
+            notify('error', (designId.value ? 'Update' : 'Save') + ' could not be confirmed. Check Saved Designs before retrying.');
         }
     } finally {
         saving.value = false;
@@ -184,12 +197,10 @@ async function generate() {
         </div>
         <template v-else>
             <div class="mb-5 flex flex-wrap items-center gap-3 text-sm" role="status">
-                <strong v-if="designId">{{ saved.name }}</strong>
+                <strong v-if="designId" class="min-w-0 break-all">{{ saved.name }}</strong>
                 <span v-if="dirty" class="rounded bg-amber-100 px-2 py-1 text-amber-950">Unsaved Changes</span>
                 <span v-else>{{ designId ? 'Saved' : 'New, unsaved design' }}</span>
-                <span class="text-teal-800">{{ notice }}</span>
             </div>
-            <p v-if="saveError" role="alert" class="mb-4 text-red-800">{{ saveError }}</p>
             <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
                 <CraneForm :form="form" :limits="limits" :errors="errors" :pending="pending" :reset-version="resetVersion"
                     :saving="saving" :editing="!!designId" @edit="edit" @generate="generate" @reset="reset" @save="save" />
