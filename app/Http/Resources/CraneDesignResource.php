@@ -19,6 +19,7 @@ class CraneDesignResource extends JsonResource
             'girder_depth' => $this->girder_depth,
             'girder_width' => $this->girder_width,
             'end_carriage_length' => $this->end_carriage_length,
+            'updated_at' => $this->updated_at->toIso8601String(),
         ];
     }
 }

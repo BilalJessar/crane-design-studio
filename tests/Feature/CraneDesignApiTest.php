@@ -30,26 +30,40 @@ class CraneDesignApiTest extends TestCase
 
     public function test_create_retrieve_replace_and_delete(): void
     {
+        $this->freezeTime();
         $input = CraneDesign::factory()->raw(['capacity' => 5.25]);
         $created = $this->postJson('/api/designs', $input + ['id' => 999])->assertCreated();
         $id = $created->json('data.id');
         $this->assertIsInt($id);
         $this->assertNotSame(999, $id);
         $url = "/api/designs/$id";
-        $expected = ['data' => ['id' => $id] + $input];
+        $metadata = ['id' => $id, 'updated_at' => now()->toIso8601String()];
+        $expected = ['data' => $metadata + $input];
         $created->assertExactJson($expected);
         $this->get($url)->assertOk()->assertExactJson($expected);
-        $this->assertDatabaseHas('crane_designs', $expected['data']);
+        $this->assertDatabaseHas('crane_designs', ['id' => $id] + $input);
 
         $updated = [
             'name' => 'Revised drawing', 'crane_type' => 'single_girder', 'capacity' => 6,
             'span' => 12000, 'lifting_height' => 4500, 'girder_depth' => 600,
             'girder_width' => 350, 'end_carriage_length' => 2200,
         ];
-        $this->putJson($url, $updated)->assertOk()->assertExactJson(['data' => ['id' => $id] + $updated]);
+        $this->putJson($url, $updated)->assertOk()->assertExactJson(['data' => $metadata + $updated]);
+        $this->assertDatabaseCount('crane_designs', 1);
         $this->assertDatabaseHas('crane_designs', ['id' => $id] + $updated);
         $this->delete($url)->assertNoContent();
         $this->assertDatabaseCount('crane_designs', 0);
+    }
+
+    public function test_reopened_parameters_regenerate_both_views(): void
+    {
+        $design = CraneDesign::factory()->create();
+        $saved = $this->getJson("/api/designs/$design->id")->assertOk()->json('data');
+        $this->postJson('/api/designs/generate', $saved)->assertOk()
+            ->assertJsonPath('data.parameters.span', $design->span)
+            ->assertJsonMissingPath('data.parameters.updated_at')
+            ->assertJsonStructure(['data' => ['views' => ['front', 'top']]]);
+        $this->assertDatabaseCount('crane_designs', 1);
     }
 
     public function test_all_fields_are_required_on_create_and_update_without_accept_header(): void

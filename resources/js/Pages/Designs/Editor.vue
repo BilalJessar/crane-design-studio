@@ -1,51 +1,142 @@
 <script setup>
 import axios from 'axios';
+import { Head, router } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { validPreview } from '../../previewGeometry';
-import { Head } from '@inertiajs/vue3';
-import { onBeforeUnmount, reactive, ref } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import CraneForm from '../../Components/CraneForm.vue';
 import CraneDrawing from '../../Components/CraneDrawing.vue';
 import TechnicalSummary from '../../Components/TechnicalSummary.vue';
 
-const props = defineProps({ limits: Object, previewUrl: String });
+const props = defineProps({ limits: Object, previewUrl: String, designId: String });
 const defaults = {
     name: 'Crane 001', crane_type: 'single_girder', capacity: 5, span: 15000,
     lifting_height: 6000, girder_depth: 500, girder_width: 300, end_carriage_length: 2500,
 };
+const keys = Object.keys(defaults);
 const form = reactive({ ...defaults });
+const saved = ref({ ...defaults });
+const previewInputs = ref(null);
+const designId = ref(props.designId);
 const geometry = ref(null);
 const view = ref('front');
 const pending = ref(false);
-const outdated = ref(false);
+const saving = ref(false);
+const loading = ref(!!designId.value);
+const loadError = ref('');
+const saveError = ref('');
+const notice = ref('');
 const errors = ref({});
 const error = ref('');
 const resetVersion = ref(0);
+const lifetime = new AbortController();
 let activeRequest;
+let removeGuard;
 
-function cancel() {
+function matches(inputs) {
+    return keys.every(key => String(form[key]) === String(inputs[key]));
+}
+const dirty = computed(() => !matches(saved.value));
+const outdated = computed(() => !!previewInputs.value && !matches(previewInputs.value));
+const title = computed(() => designId.value ? 'Edit Design' : 'New Design');
+
+function restore(record) {
+    saved.value = Object.fromEntries(keys.map(key => [key, record[key]]));
+    Object.assign(form, saved.value);
+}
+async function reopen() {
+    loading.value = true;
+    loadError.value = '';
+    try {
+        const { data } = await axios.get('/api/designs/' + designId.value, { signal: lifetime.signal });
+        restore(data.data);
+        generate();
+    } catch (failure) {
+        loadError.value = failure.response?.status === 404 ? 'Design not found. It may have been deleted.'
+            : 'Could not load this design. Check your connection and try again.';
+    } finally {
+        loading.value = false;
+    }
+}
+function cancelPreview() {
     activeRequest?.abort();
     activeRequest = undefined;
     pending.value = false;
 }
-onBeforeUnmount(cancel);
+function beforeUnload(event) {
+    if (dirty.value) {
+        event.preventDefault();
+        event.returnValue = '';
+    }
+}
+onMounted(() => {
+    window.addEventListener('beforeunload', beforeUnload);
+    removeGuard = router.on('before', () => {
+        if (dirty.value && !window.confirm('Leave this design and discard your unsaved changes?')) return false;
+    });
+    if (designId.value) reopen();
+});
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', beforeUnload);
+    removeGuard?.();
+    lifetime.abort();
+    cancelPreview();
+});
 
 function edit(key, value) {
-    cancel();
+    cancelPreview();
     form[key] = value;
     delete errors.value[key];
-    error.value = Object.keys(errors.value).length ? 'Review the highlighted inputs and generate again.' : '';
-    outdated.value = !!geometry.value;
+    error.value = '';
+    notice.value = '';
+    saveError.value = '';
 }
 function reset() {
-    cancel();
-    Object.assign(form, defaults);
+    cancelPreview();
+    Object.assign(form, saved.value);
     errors.value = {};
-    error.value = '';
-    geometry.value = null;
-    outdated.value = false;
+    error.value = saveError.value = notice.value = '';
+    geometry.value = previewInputs.value = null;
     view.value = 'front';
     resetVersion.value++;
+    if (designId.value) generate();
+}
+async function save() {
+    if (saving.value) return;
+    cancelPreview();
+    saving.value = true;
+    notice.value = saveError.value = error.value = '';
+    errors.value = {};
+    try {
+        const creating = !designId.value;
+        const payload = { ...form };
+        const config = { signal: lifetime.signal };
+        const { data } = creating ? await axios.post('/api/designs', payload, config)
+            : await axios.put('/api/designs/' + designId.value, payload, config);
+        if (!data?.data?.id || !keys.every(key => data.data[key] != null)) throw new Error();
+        designId.value = String(data.data.id);
+        restore(data.data);
+        if (creating) {
+            router.replace({
+                url: '/designs/' + designId.value + '/edit',
+                props: current => ({ ...current, designId: designId.value }),
+                preserveState: true,
+            });
+        }
+        notice.value = creating ? 'Design saved.' : 'Changes saved.';
+        if (!geometry.value || outdated.value) generate();
+    } catch (failure) {
+        if (failure.response?.status === 422) {
+            errors.value = failure.response.data.errors;
+            saveError.value = 'Review the highlighted inputs and save again.';
+        } else if (failure.response?.status === 404) {
+            saveError.value = 'This design no longer exists. Your inputs are still shown below.';
+        } else {
+            saveError.value = 'Save could not be confirmed. Check Saved Designs before retrying.';
+        }
+    } finally {
+        saving.value = false;
+    }
 }
 async function generate() {
     if (pending.value) return;
@@ -54,11 +145,9 @@ async function generate() {
     pending.value = true;
     errors.value = {};
     error.value = '';
+    const inputs = { ...form };
     try {
-        const response = await axios.post(props.previewUrl, { ...form }, {
-            signal: request.signal,
-            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        });
+        const response = await axios.post(props.previewUrl, inputs, { signal: request.signal });
         if (request !== activeRequest) return;
         const data = response.data?.data;
         if (!validPreview(data)) {
@@ -66,7 +155,7 @@ async function generate() {
             return;
         }
         geometry.value = data;
-        outdated.value = false;
+        previewInputs.value = inputs;
     } catch (failure) {
         if (activeRequest !== request) return;
         if (failure.response?.status === 422 && failure.response.data?.errors) {
@@ -86,16 +175,29 @@ async function generate() {
 </script>
 
 <template>
-    <Head title="New Design · Crane Design Studio" />
+    <Head :title="title + ' · Crane Design Studio'" />
     <AppLayout>
-        <h1 class="mb-5 text-3xl font-semibold tracking-tight">New design</h1>
-        <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-            <CraneForm :form="form" :limits="limits" :errors="errors" :pending="pending" :reset-version="resetVersion"
-                @edit="edit" @generate="generate" @reset="reset" />
-            <div class="min-w-0 space-y-5">
-                <CraneDrawing v-model:view="view" :geometry="geometry" :pending="pending" :error="error" :outdated="outdated" />
-                <TechnicalSummary :geometry="geometry" />
-            </div>
+        <h1 class="mb-3 text-3xl font-semibold tracking-tight">{{ title }}</h1>
+        <p v-if="loading" role="status">Loading design…</p>
+        <div v-else-if="loadError" role="alert">
+            {{ loadError }} <button class="underline" @click="reopen">Retry</button>
         </div>
+        <template v-else>
+            <div class="mb-5 flex flex-wrap items-center gap-3 text-sm" role="status">
+                <strong v-if="designId">{{ saved.name }}</strong>
+                <span v-if="dirty" class="rounded bg-amber-100 px-2 py-1 text-amber-950">Unsaved Changes</span>
+                <span v-else>{{ designId ? 'Saved' : 'New, unsaved design' }}</span>
+                <span class="text-teal-800">{{ notice }}</span>
+            </div>
+            <p v-if="saveError" role="alert" class="mb-4 text-red-800">{{ saveError }}</p>
+            <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                <CraneForm :form="form" :limits="limits" :errors="errors" :pending="pending" :reset-version="resetVersion"
+                    :saving="saving" :editing="!!designId" @edit="edit" @generate="generate" @reset="reset" @save="save" />
+                <div class="min-w-0 space-y-5">
+                    <CraneDrawing v-model:view="view" :geometry="geometry" :pending="pending" :error="error" :outdated="outdated" />
+                    <TechnicalSummary :geometry="geometry" />
+                </div>
+            </div>
+        </template>
     </AppLayout>
 </template>
